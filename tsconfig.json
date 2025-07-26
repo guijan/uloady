@@ -1,0 +1,12 @@
+{
+  "extends": "@tsconfig/node22/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "tsBuildInfoFile": "tsconfig.tsbuildInfo", 
+    "rewriteRelativeImportExtensions": true,
+    "strict": true,
+    "resolveJsonModule": true,
+  },
+  
+  "include": ["./src"],
+}

@@ -1,0 +1,33 @@
+{
+  "name": "uloady",
+  "version": "0.0.0",
+  "description": "upload a file to a free file host",
+  "homepage": "https://github.com/guijan/uploady",
+  "bugs": "https://github.com/guijan/uploady/issues",
+  "license": "ISC",
+  "author": "Guilherme Janczak <guilherme.janczak@yandex.com>",
+  "files": [
+    "dist/**/*.js",
+    "src/uloady.1"
+  ],
+  "repository": "github:guijan/uploady",
+  "type": "module",
+  "bin": "bin/uloady",
+  "man": "src/uloady.1",
+  "scripts": {
+    "test": "\"$npm_execpath\" run types:check && tsx --test './test/**/*.ts'",
+    "prepack": "tsc --build",
+    "types:check": "tsc --build --noEmit"
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "packageManager": "pnpm@10.13.1",
+  "devDependencies": {
+    "@tsconfig/node22": "^22.0.2",
+    "@types/node": "^24.1.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
