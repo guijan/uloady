@@ -80,6 +80,7 @@ abstract class FileHost {
 
 @FileHost.subClass
 export class Catbox extends FileHost {
+  // Documentation: https://catbox.moe/tools.php
   protected readonly url = 'https://catbox.moe/user/api.php';
   protected readonly formValues = {
     reqtype: 'fileupload',
@@ -90,17 +91,20 @@ export class Catbox extends FileHost {
 // 0x0st
 @FileHost.subClass
 export class OxOst extends FileHost {
+  // Documentation: https://0x0.st
   protected readonly url: string = 'https://0x0.st';
-  protected readonly formValues = {file: FileHost.dataToken,};
+  protected readonly formValues = {file: FileHost.dataToken};
 };
 
 @FileHost.subClass
 export class X0at extends OxOst {
+  // Documentation: https://x0.at
   protected readonly url = 'https://x0.at';
 };
 
 @FileHost.subClass
 export class Uguu extends FileHost {
+  // Documentation: https://uguu.se/api
   protected readonly url = 'https://uguu.se/upload?output=text';
   protected readonly formValues = {'files[]': FileHost.dataToken};
 };
