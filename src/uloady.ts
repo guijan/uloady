@@ -12,111 +12,97 @@ const programVersion: string = JSON.parse(fs.readFileSync(
 const userAgent = `uloady/${programVersion}`;
 
 abstract class FileHost {
-  protected abstract sendFile(
-    fileName: string, data: Promise<Blob>): Promise<string>;
+  private static derivedConstructors: Record<string, new () => FileHost> = {};
+  protected static subClass(
+    constructor: new () => FileHost,
+    context: ClassDecoratorContext
+  ) {
+    let name = context.name as string;
+    if (name === 'OxOst') {
+      // Spaghetti because the class name can't start with a number.
+      name = '0x0st';
+    } else {
+      name = name.toLowerCase();
+    }
 
-  private sendfile_impl: typeof this.sendFile;
+    FileHost.derivedConstructors[name] = constructor;
+  }
+  static service(service: string): new () => FileHost {
+    return this.derivedConstructors[service];
+  }
+  protected static readonly dataToken = Symbol('placeholder for data');
+
+  protected abstract readonly url: string;
+  protected abstract readonly formValues: {
+    [index: string]: string | symbol,
+  };
 
   async upload(fileName: string): Promise<string> {
-    return this.sendfile_impl(fileName, fs.openAsBlob(fileName));
-  }
-
-  constructor(sendFile?: boolean | typeof this.sendFile) {
-    switch (sendFile) {
-      case true:
-      case undefined:
-        this.sendfile_impl = this.sendFile;
-        break;
-      case false:
-        this.sendfile_impl = () => new Promise((resolve) => resolve("dry run"));
-        break;
-      default:
-        this.sendfile_impl = sendFile
-        break;
-    }
-  }
-};
-
-export class Catbox extends FileHost {
-  protected async sendFile(
-    fileName: string,
-    dataPromise: Promise<Blob>
-  ): Promise<string> {
     const formData = new FormData();
-    const data = await dataPromise;
-    formData.append('reqtype', 'fileupload');
-    formData.append('time', '12h');
-    formData.append('fileToUpload', data, fileName);
+    for (const property in this.formValues) {
+      let value = this.formValues[property];
+      if (value === FileHost.dataToken) {
+        formData.append(
+          property,
+          await fs.openAsBlob(fileName),
+          path.extname(fileName)
+        );
+      } else if (typeof value === 'string') {
+        formData.append(property, value);
+      } else {
+        throw new TypeError(
+          `form key ${property} value ${String(value)}` +
+          ` of type ${typeof value} isn't valid`
+        );  
+      }
+    }
     const options: RequestInit = {
       method: 'POST',
       headers: {
-        'content-length': data.size.toString(),
-      },
-      body: formData,
-    };
-    const request = new Request(
-      'https://litterbox.catbox.moe/resources/internals/api.php',
-      options
-    );
-    const response = await fetch(request);
-    if (!response.ok) {
-      throw response;
-    }
-    return response.text();
-  }
-};
-
-export class X0at extends FileHost {
-  protected async sendFile(
-    fileName: string,
-    dataPromise: Promise<Blob>
-  ): Promise<string> {
-    const formData = new FormData();
-    formData.append('file', dataPromise);
-    formData.append('filename', fileName);
-    const options: RequestInit = {
-      method: 'POST',
-      headers: {
-        'content-length': (await dataPromise).size.toString(),
         'user-agent': userAgent,
       },
       body: formData,
     };
-    const request = new Request(
-      'https://x0.at',
-      options
-    );
-    const response = await fetch(request);
-    if (!response.ok) {
-      throw response;
+    const request = new Request(this.url, options);
+    if (!this.dryRun) {
+      const response = await fetch(request);
+      if (!response.ok) {
+        throw response;
+      }
+      return response.text().then(value => value.trim());
     }
-    return response.text();
+    return "dry run";
+  }
+
+  constructor(private dryRun: boolean = false) {
+  }
+};
+
+@FileHost.subClass
+export class Catbox extends FileHost {
+  protected readonly url = 'https://catbox.moe/user/api.php';
+  protected readonly formValues = {
+    reqtype: 'fileupload',
+    fileToUpload: FileHost.dataToken,
   }
 };
 
 // 0x0st
+@FileHost.subClass
 export class OxOst extends FileHost {
-  protected async sendFile(
-    fileName: string,
-    dataPromise: Promise<Blob>
-  ): Promise<string> {
-    const formData = new FormData();
-    const data = await dataPromise;
-    formData.append('file', data);
-    const options: RequestInit = {
-      method: 'POST',
-      headers: {
-        'user-agent': userAgent,
-      },
-      body: formData,
-    };
-    const request = new Request('https://0x0.st', options);
-    const response = await fetch(request);
-    if (!response.ok) {
-      throw new Error(`Response status: ${response.status}`);
-    }
-    return response.text();
-  }
+  protected readonly url: string = 'https://0x0.st';
+  protected readonly formValues = {file: FileHost.dataToken,};
+};
+
+@FileHost.subClass
+export class X0at extends OxOst {
+  protected readonly url = 'https://x0.at';
+};
+
+@FileHost.subClass
+export class Uguu extends FileHost {
+  protected readonly url = 'https://uguu.se/upload?output=text';
+  protected readonly formValues = {'files[]': FileHost.dataToken};
 };
 
 export default async function main(args: string[]): Promise<number> {
@@ -132,6 +118,11 @@ export default async function main(args: string[]): Promise<number> {
       short: 'n',
       default: false,
     },
+    service: {
+      type: 'string',
+      short: 's',
+      default: 'uguu'
+    }
   };
 
   try {
@@ -144,7 +135,12 @@ export default async function main(args: string[]): Promise<number> {
     if (positionals.length === 0) {
       throw new Error(`no input file`);
     }
-    let host = new OxOst(!values['dry-run']);
+    let serviceName = values['service'] as string;
+    let service = FileHost.service(serviceName);
+    if (typeof service === 'undefined') {
+      throw new Error(`invalid service '${serviceName}'`)
+    }
+    let host = new service();
     console.log(await host.upload(positionals[0]));
   } catch (error) {
     ret = typeof error === 'number' ? error : err(error as Error);
@@ -164,18 +160,16 @@ function helpFlag() {
 }
 
 // err: prepend programName to an error message and return a UNIX exit value.
+// Doesn't exit because I don't know how I'd test the rest of the program
+// properly if it was exiting all the time over monkeypatched implementations or
+// deliberately wrong input.
 // 
-// print error.message and return error.
+// print error.message and return an error exit code.
 function err(error: Error): number;
 // print message and return exitValue.
 function err(exitValue: number, message: string): number;
 // print util.format(format, ...rest) and return exitValue.
 function err(exitValue: number, format: string, ...rest: string[]): number;
-function err(
-  exitValue: number,
-  format: string,
-  ...rest: string[]
-): number;
 function err(
   errorOrExitValue: Error | number, // number in the range 0,255 inclusive.
   format?: string,
