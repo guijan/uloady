@@ -1,4 +1,5 @@
 import console from 'node:console';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -12,7 +13,11 @@ const programVersion: string = JSON.parse(fs.readFileSync(
 const userAgent = `uloady/${programVersion}`;
 
 abstract class FileHost {
-  private static derivedConstructors: Record<string, new () => FileHost> = {};
+  // Fast iteration and indexing. Lookups are going to be rare.
+  // An array is the right data structure.
+  // Contains the name and constructors of all subclasses.
+  private static derivedClass:
+    Array<{name: string, constructor: new () => FileHost}> = new Array();
   protected static subClass(
     constructor: new () => FileHost,
     context: ClassDecoratorContext
@@ -25,10 +30,16 @@ abstract class FileHost {
       name = name.toLowerCase();
     }
 
-    FileHost.derivedConstructors[name] = constructor;
+    FileHost.derivedClass.push({name, constructor});
   }
-  static service(service: string): new () => FileHost {
-    return this.derivedConstructors[service];
+  static service(service: string | undefined): new () => FileHost {
+    let index;
+    if (service === undefined) {
+      index = crypto.randomInt(this.derivedClass.length);
+    } else {
+      index = this.derivedClass.findIndex(element => element.name == service);
+    }
+    return this.derivedClass[index].constructor;
   }
   protected static readonly dataToken = Symbol('placeholder for data');
 
@@ -125,7 +136,7 @@ export default async function main(args: string[]): Promise<number> {
     service: {
       type: 'string',
       short: 's',
-      default: 'uguu'
+      default: undefined,
     }
   };
 
