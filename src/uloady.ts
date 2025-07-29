@@ -16,8 +16,7 @@ abstract class FileHost {
   // Fast iteration and indexing. Lookups are going to be rare.
   // An array is the right data structure.
   // Contains the name and constructors of all subclasses.
-  private static derivedClass:
-    Array<{name: string, constructor: new () => FileHost}> = new Array();
+  private static derivedClass: Map<string, new () => FileHost> = new Map();
   protected static subClass(
     constructor: new () => FileHost,
     context: ClassDecoratorContext
@@ -30,16 +29,40 @@ abstract class FileHost {
       name = name.toLowerCase();
     }
 
-    FileHost.derivedClass.push({name, constructor});
+    FileHost.derivedClass.set(name, constructor);
   }
-  static service(service: string | undefined): new () => FileHost {
-    let index;
+  static service(service: undefined | string): new () => FileHost {
+    let i = 0;
+    let skip;
     if (service === undefined) {
-      index = crypto.randomInt(this.derivedClass.length);
-    } else {
-      index = this.derivedClass.findIndex(element => element.name == service);
+      skip = crypto.randomInt(this.derivedClass.size);
+      for (const constructor of this.derivedClass.values()) {
+        if (i++ === skip)
+          return constructor;
+      }
     }
-    return this.derivedClass[index].constructor;
+    // Explicit type because tsc thinks service can still be undefined.
+    let services = (service as string).split(',').map((array) => array.trim());
+    // Comma is optional for the last element.
+    if (services[services.length-1] === '') {
+      services.pop();
+    }
+    if (services.length === 1 && services[0] === 'default') {
+      return this.service(undefined);
+    }
+    let constructor;
+    skip = crypto.randomInt(services.length);
+    for (service of services) {
+      let tmp = this.derivedClass.get(service);
+      if (tmp === undefined) {
+        throw new Error(`unknown service '${service}' in '${services}'`);
+      }
+      if (i++ === skip) {
+        constructor = tmp;
+      }
+    }
+    
+    return constructor as ReturnType<typeof FileHost.service>;
   }
   protected static readonly dataToken = Symbol('placeholder for data');
 
@@ -144,17 +167,17 @@ export default async function main(args: string[]): Promise<number> {
     const { values, positionals } = util.parseArgs(
       {options, args, allowPositionals: true}
     );
+
     if (values.help) {
       helpFlag();
     }
+
     if (positionals.length === 0) {
       throw new Error(`no input file`);
     }
-    let serviceName = values['service'] as string;
-    let service = FileHost.service(serviceName);
-    if (typeof service === 'undefined') {
-      throw new Error(`invalid service '${serviceName}'`)
-    }
+
+    let serviceNames = values['service'] as undefined | string;
+    let service = FileHost.service(serviceNames);
     let host = new service();
     console.log(await host.upload(positionals[0]));
   } catch (error) {
@@ -169,7 +192,7 @@ function helpFlag() {
     `${programName} v${programVersion}\n` +
     `usage:\n` +
     `\t${programName} -h\n` +
-    `\t${programName} [-n] FILE [FILE ...]`;
+    `\t${programName} [-n] [-s SERVICE[,SERVICE ...]] FILE [FILE ...]`;
   console.error(help);
   throw 0;
 }
