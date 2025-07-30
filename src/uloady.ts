@@ -12,11 +12,27 @@ const programVersion: string = JSON.parse(fs.readFileSync(
 )).version;
 const userAgent = `uloady/${programVersion}`;
 
+type FileHostInfo = {
+  constructor: new () => FileHost,
+  maxFileSize: number,
+};
 abstract class FileHost {
-  // Fast iteration and indexing. Lookups are going to be rare.
-  // An array is the right data structure.
-  // Contains the name and constructors of all subclasses.
-  private static derivedClass: Map<string, new () => FileHost> = new Map();
+  // maxFileSize is the maximum file size allowed by the host.
+  protected abstract readonly maxFileSize: number;
+  // url is the full URL the request should be sent to.
+  protected abstract readonly url: string;
+  // formValues contains key: value pairs with the form data needed for
+  // uploading a file.
+  // The FileHost.dataToken symbol can be used to mark which key should contain
+  // the file data.
+  protected abstract readonly formValues: {
+    [index: string]: string | symbol,
+  };
+  protected static readonly dataToken = Symbol('placeholder for data');
+
+
+  // Maps the name to the constructor and limits of all subclasses.
+  private static derivedClass = new Map<string, FileHostInfo>();
   protected static subClass(
     constructor: new () => FileHost,
     context: ClassDecoratorContext
@@ -29,66 +45,80 @@ abstract class FileHost {
       name = name.toLowerCase();
     }
 
-    FileHost.derivedClass.set(name, constructor);
+    let info: FileHostInfo = {
+      constructor,
+      maxFileSize: new constructor().maxFileSize,
+    }
+    FileHost.derivedClass.set(name, info);
   }
-  static service(service: undefined | string): new () => FileHost {
-    let i = 0;
-    let skip;
-    if (service === undefined) {
-      skip = crypto.randomInt(this.derivedClass.size);
-      for (const constructor of this.derivedClass.values()) {
-        if (i++ === skip)
-          return constructor;
+  private serviceName() {
+    for (const [name, info] of FileHost.derivedClass) {
+      if (info.constructor === this.constructor) {
+        return name;
       }
     }
-    // Explicit type because tsc thinks service can still be undefined.
-    let services = (service as string).split(',').map((array) => array.trim());
-    // Comma is optional for the last element.
-    if (services[services.length-1] === '') {
-      services.pop();
-    }
-    if (services.length === 1 && services[0] === 'default') {
-      return this.service(undefined);
-    }
-    let constructor;
-    skip = crypto.randomInt(services.length);
-    for (service of services) {
-      let tmp = this.derivedClass.get(service);
-      if (tmp === undefined) {
-        throw new Error(`unknown service '${service}' in '${services}'`);
-      }
-      if (i++ === skip) {
-        constructor = tmp;
-      }
-    }
-
-    return constructor as ReturnType<typeof FileHost.service>;
   }
-  protected static readonly dataToken = Symbol('placeholder for data');
+  static service(
+    serviceNames: undefined | string,
+    fileName: string,
+    fileSize: number,
+  ): new () => FileHost {
+    let services: typeof this.derivedClass;
+    if (serviceNames === undefined) { // Set services to all the possible services.
+      services = new Map(this.derivedClass);
+    } else { // Set services to the subset of services picked by the user.
+      let wantedServices = serviceNames.split(',').map((array) => array.trim());
+      // Comma is optional for the last element.
+      if (wantedServices[wantedServices.length-1] === '') {
+        wantedServices.pop();
+      }
+      if (wantedServices.length === 1 && wantedServices[0] === 'default') {
+        return this.service(undefined, fileName, fileSize);
+      }
+      services = new Map();
+      for (const name of wantedServices) {
+        let constructor = this.derivedClass.get(name);
+        if (constructor === undefined) {
+          throw new Error(`unknown service '${name}' in '${services}'`);
+        }
+        services.set(name, constructor);
+      }
+    }
 
-  protected abstract readonly url: string;
-  protected abstract readonly formValues: {
-    [index: string]: string | symbol,
-  };
+    // Ensure all the services can handle the file's size.
+    let maxFileSize = 0;
+    for (const [name, info] of services) {
+      maxFileSize = Math.max(maxFileSize, info.maxFileSize);
+      if (fileSize > info.maxFileSize) {
+        services.delete(name);
+      }
+    }
+    if (services.size === 0) {
+      throw new Error(
+        `\n\tfile too large: '${fileName}'\n` +
+        `\tfile size: ${getHumanFileSize(fileSize)}\n` +
+        `\tmaximum size: ${getHumanFileSize(maxFileSize)}`
+      );
+    }
 
-  async upload(fileName: string): Promise<string> {
+    let entry = services
+      .entries()
+      .drop(crypto.randomInt(services.size))
+      .next()
+      .value;
+    const [_, info] = entry as NonNullable<typeof entry>;
+    return info.constructor as ReturnType<typeof FileHost.service>;
+  }
+  async upload(fileName: string, data: Blob): Promise<string> {
     const formData = new FormData();
     for (const property in this.formValues) {
       let value = this.formValues[property];
       if (value === FileHost.dataToken) {
-        let data;
-        try {
-          data = await fs.openAsBlob(fileName);
-        } catch (error) {
-          // Node doesn't include the filename in the error message.
-          (error as Error).message = `unable to open '${fileName}' as Blob`;
-          throw error;
-        }
-        formData.append(property, data, path.extname(fileName));
+        formData.append(property, data, fileName);
       } else if (typeof value === 'string') {
         formData.append(property, value);
       } else {
-        throw new TypeError(
+        throw new Error(
           `form key ${property} value ${String(value)}` +
           ` of type ${typeof value} isn't valid`
         );
@@ -119,6 +149,7 @@ abstract class FileHost {
 @FileHost.subClass
 export class Catbox extends FileHost {
   // Documentation: https://catbox.moe/tools.php
+  protected readonly maxFileSize = 200 * 1024 * 1024;
   protected readonly url = 'https://catbox.moe/user/api.php';
   protected readonly formValues = {
     reqtype: 'fileupload',
@@ -130,6 +161,7 @@ export class Catbox extends FileHost {
 @FileHost.subClass
 export class OxOst extends FileHost {
   // Documentation: https://0x0.st
+  protected readonly maxFileSize = 512 * 1024 * 1024;
   protected readonly url: string = 'https://0x0.st';
   protected readonly formValues = {file: FileHost.dataToken};
 };
@@ -143,6 +175,7 @@ export class X0at extends OxOst {
 @FileHost.subClass
 export class Uguu extends FileHost {
   // Documentation: https://uguu.se/api
+  protected readonly maxFileSize = 128 * 1024 * 1024;
   protected readonly url = 'https://uguu.se/upload?output=text';
   protected readonly formValues = {'files[]': FileHost.dataToken};
 };
@@ -188,10 +221,19 @@ export default async function main(args: string[]): Promise<number> {
   let ret = 0;
   for (const file of files) {
     try {
-      let serviceNames = flags['service'] as undefined | string;
-      let service = FileHost.service(serviceNames);
+      const serviceNames = flags.service as undefined | string;
+      let data;
+      const baseName = path.basename(file);
+      try {
+        data = await fs.openAsBlob(file);
+      } catch (error) {
+        // Node doesn't include the filename in the error message.
+        (error as Error).message = `unable to open '${baseName}' as Blob`;
+        throw error;
+      }
+      let service = FileHost.service(serviceNames, baseName, data.size);
       let host = new service();
-      console.log(await host.upload(file));
+      console.log(await host.upload(path.extname(file), data));
 
     } catch (error) {
       err(error as Error);
@@ -210,6 +252,19 @@ function helpFlag() {
     `\t${programName} [-n] [-s SERVICE[,SERVICE ...]] FILE [FILE ...]`;
   console.error(help);
   throw 0;
+}
+
+function getHumanFileSize(fileSize: number) {
+  const suffixes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+
+  let suffix;
+  for (suffix of suffixes) {
+    if (fileSize < 1024) {
+      break;
+    }
+    fileSize /= 1024;
+  }
+  return fileSize.toPrecision(3) + (suffix as string);
 }
 
 // err: prepend programName to an error message and return a UNIX exit value.
