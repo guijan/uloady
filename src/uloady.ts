@@ -210,6 +210,28 @@ export class PomfLain extends Uguu {
 }
 
 @FileHost.subClass
+export class GoFileIO extends FileHost {
+  // Documentation: https://gofile.io/api
+  //
+  // Server response looks like this:
+  // {"data":{"createTime":1753917377,"downloadPage":"https://gofile.io/d/kJ6fm8","guestToken":"YdZ5fjNEK4toR5HxyoXodN74qukoncuf","id":"e882ca92-8338-4a20-8371-b11e25ae7353","md5":"074929ca061af7af3dc91725857daa51","mimetype":"image/png","modTime":1753917377,"name":"test_image.png","parentFolder":"ba6f643d-8805-48c0-8834-e7e1c2e86cac","parentFolderCode":"kJ6fm8","servers":["store8"],"size":238,"type":"file"},"status":"ok"}
+  //
+  protected readonly maxFileSize = 50 * 1024 * 1024 * 1024; // Unknown.
+  protected readonly url = 'https://upload.gofile.io/uploadfile';
+   protected readonly formValues = {
+    'file': FileHost.dataToken,
+  }
+  protected readonly fileNameFixup = (fileName: string) => {
+    return path.basename(fileName).trim();
+  }
+  protected readonly responseFixup = (response: string) => {
+    const json = JSON.parse(response);
+    return json.data.downloadPage;
+  }
+  protected readonly default = false
+}
+
+@FileHost.subClass
 export class Blicky extends FileHost {
   // Undocumented. Selecting a file for upload says the file size limit is
   // 100MiB. https://f.blicky.net
