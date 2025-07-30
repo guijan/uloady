@@ -180,9 +180,17 @@ export class X0at extends OxOst {
 export class Uguu extends FileHost {
   // Documentation: https://uguu.se/api
   protected readonly maxFileSize = 128 * 1024 * 1024;
-  protected readonly url = 'https://uguu.se/upload?output=text';
+  protected readonly url: string = 'https://uguu.se/upload?output=text';
   protected readonly formValues = {'files[]': FileHost.dataToken};
 };
+
+@FileHost.subClass
+export class PomfLain extends Uguu {
+  // Undocumented, but it's just a pomf clone.
+  // https://pomf.lain.la/f/faq.html
+  protected readonly maxFileSize = 1024 * 1024 * 1024;
+  protected readonly url = 'https://pomf.lain.la/upload.php?output=text';
+}
 
 export default async function main(args: string[]): Promise<number> {
   const options: util.ParseArgsOptionsConfig = {
