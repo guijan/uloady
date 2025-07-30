@@ -15,6 +15,7 @@ const userAgent = `uloady/${programVersion}`;
 type FileHostInfo = {
   constructor: Constructor<typeof FileHost>,
   maxFileSize: number,
+  default: boolean,
 };
 type Constructor<T> =
   T extends abstract new (...args: infer P) => infer R ?
@@ -32,9 +33,20 @@ abstract class FileHost {
   protected abstract readonly formValues: {
     [index: string]: string | symbol,
   };
+  // default states whether the service should be on by default.
+  protected readonly default: boolean = true;
+  // responseFixup controls the post processing done to the server response body
+  // to produce the final url.
+  protected readonly responseFixup = (res: string) => res.trim();
+  // fileNameFixup controls the filename sent to the server.
+  // Some servers use the basename somewhere.
+  // Some servers use the extname to decide the file url's extension.
+  // Some servers don't use the filename for anything.
+  // The intention is to send the least information possible.
+  protected readonly fileNameFixup = (name: string) =>
+    path.extname(name).trim();
+
   protected static readonly dataToken = Symbol('placeholder for data');
-
-
   // Maps the name to the constructor and limits of all subclasses.
   private static derivedClass = new Map<string, FileHostInfo>();
   protected static subClass(
@@ -49,9 +61,11 @@ abstract class FileHost {
       name = name.toLowerCase();
     }
 
+    let service = new constructor();
     let info: FileHostInfo = {
       constructor,
-      maxFileSize: new constructor().maxFileSize,
+      maxFileSize: service.maxFileSize,
+      default: service.default,
     }
     FileHost.derivedClass.set(name, info);
   }
@@ -67,9 +81,13 @@ abstract class FileHost {
     fileName: string,
     fileSize: number,
   ): Constructor<typeof FileHost> {
-    let services: typeof this.derivedClass;
+    let services: typeof this.derivedClass = new Map();
     if (serviceNames === undefined) { // Set services to all the possible services.
-      services = new Map(this.derivedClass);
+      for (const [name, info] of services) {
+        if (info.default) {
+          services.set(name, info);
+        }
+      }
     } else { // Set services to the subset of services picked by the user.
       let wantedServices = serviceNames.split(',').map((array) => array.trim());
       // Comma is optional for the last element.
@@ -79,7 +97,6 @@ abstract class FileHost {
       if (wantedServices.length === 1 && wantedServices[0] === 'default') {
         return this.service(undefined, fileName, fileSize);
       }
-      services = new Map();
       for (const name of wantedServices) {
         let constructor = this.derivedClass.get(name);
         if (constructor === undefined) {
@@ -99,7 +116,7 @@ abstract class FileHost {
     }
     if (services.size === 0) {
       throw new Error(
-        `\n\tfile too large: '${fileName}'\n` +
+        `\n\tfile too large: '${path.basename(fileName)}'\n` +
         `\tfile size: ${getHumanFileSize(fileSize)}\n` +
         `\tmaximum size: ${getHumanFileSize(maxFileSize)}`
       );
@@ -118,7 +135,7 @@ abstract class FileHost {
     for (const property in this.formValues) {
       let value = this.formValues[property];
       if (value === FileHost.dataToken) {
-        formData.append(property, data, fileName);
+        formData.append(property, data, this.fileNameFixup(fileName));
       } else if (typeof value === 'string') {
         formData.append(property, value);
       } else {
@@ -141,7 +158,7 @@ abstract class FileHost {
       if (!response.ok) {
         throw response;
       }
-      return response.text().then(value => value.trim());
+      return response.text().then(value => this.responseFixup(value));
     }
     return "dry run";
   }
@@ -190,6 +207,49 @@ export class PomfLain extends Uguu {
   // https://pomf.lain.la/f/faq.html
   protected readonly maxFileSize = 1024 * 1024 * 1024;
   protected readonly url = 'https://pomf.lain.la/upload.php?output=text';
+}
+
+@FileHost.subClass
+export class Blicky extends FileHost {
+  // Undocumented. Selecting a file for upload says the file size limit is
+  // 100MiB. https://f.blicky.net
+  //
+  // To upload:
+  // curl -F file=@/tmp/test_image.png https://f.blicky.net/script.php
+  //
+  // The server response is 2 lines:
+  // The first line is $FILE_HASH. It uniquely identifies the file.
+  // The second line is $DELETE_CODE. It allows deleting the file.
+  //
+  // Using the $FILE_HASH and $DELETE_PASS, as in shell syntax, you can
+  // construct the following URLs:
+  //
+  // Indirect download URL: https://f.blicky.net/f.php?h=${FILE_HASH}
+  // Browser preview URL: https://f.blicky.net/f.php?h=${FILE_HASH}&p=1
+  // Direct download URL: https://f.blicky.net/f.php?h=${FILE_HASH}&d=1
+  // Delete URL: https://f.blicky.net/f.php?h=${FILE_HASH}&d=${DELETE_PASS}
+  //
+  // The server uses the filename in the indirect page and in the direct
+  // download.
+  //
+  // Currently has issues because we don't set Content-Type properly, for this
+  // Blob.type needs to be set on construction.
+  // The issues are that the preview link will download the file for all files.
+  // Additionally, the indirect download URL is supposed to contain a link to
+  // the preview when applicable, and it doesn't.
+  protected readonly maxFileSize = 100 * 1024 * 1024;
+  protected readonly url = 'https://f.blicky.net/script.php';
+  protected readonly formValues = {
+    file: FileHost.dataToken,
+  }
+  protected readonly responseFixup = (body: string) => {
+    body = body.slice(0, body.search('\n'));
+    return 'https://f.blicky.net/f.php?h=' + body + '&p=1';
+  }
+  protected readonly fileNameFixup = (fileName: string) => {
+    return path.basename(fileName).trim();
+  }
+  protected readonly default = false;
 }
 
 export default async function main(args: string[]): Promise<number> {
@@ -245,7 +305,7 @@ export default async function main(args: string[]): Promise<number> {
       }
       let service = FileHost.service(serviceNames, baseName, data.size);
       let host = new service();
-      console.log(await host.upload(path.extname(file), data));
+      console.log(await host.upload(file, data));
 
     } catch (error) {
       err(error as Error);
