@@ -13,9 +13,13 @@ const programVersion: string = JSON.parse(fs.readFileSync(
 const userAgent = `uloady/${programVersion}`;
 
 type FileHostInfo = {
-  constructor: new () => FileHost,
+  constructor: Constructor<typeof FileHost>,
   maxFileSize: number,
 };
+type Constructor<T> =
+  T extends abstract new (...args: infer P) => infer R ?
+  new (...args: P) => R :
+  never;
 abstract class FileHost {
   // maxFileSize is the maximum file size allowed by the host.
   protected abstract readonly maxFileSize: number;
@@ -34,7 +38,7 @@ abstract class FileHost {
   // Maps the name to the constructor and limits of all subclasses.
   private static derivedClass = new Map<string, FileHostInfo>();
   protected static subClass(
-    constructor: new () => FileHost,
+    constructor: Constructor<typeof FileHost>,
     context: ClassDecoratorContext
   ) {
     let name = context.name as string;
@@ -62,7 +66,7 @@ abstract class FileHost {
     serviceNames: undefined | string,
     fileName: string,
     fileSize: number,
-  ): new () => FileHost {
+  ): Constructor<typeof FileHost> {
     let services: typeof this.derivedClass;
     if (serviceNames === undefined) { // Set services to all the possible services.
       services = new Map(this.derivedClass);
