@@ -61,7 +61,7 @@ abstract class FileHost {
         constructor = tmp;
       }
     }
-    
+
     return constructor as ReturnType<typeof FileHost.service>;
   }
   protected static readonly dataToken = Symbol('placeholder for data');
@@ -76,18 +76,22 @@ abstract class FileHost {
     for (const property in this.formValues) {
       let value = this.formValues[property];
       if (value === FileHost.dataToken) {
-        formData.append(
-          property,
-          await fs.openAsBlob(fileName),
-          path.extname(fileName)
-        );
+        let data;
+        try {
+          data = await fs.openAsBlob(fileName);
+        } catch (error) {
+          // Node doesn't include the filename in the error message.
+          (error as Error).message = `unable to open '${fileName}' as Blob`;
+          throw error;
+        }
+        formData.append(property, data, path.extname(fileName));
       } else if (typeof value === 'string') {
         formData.append(property, value);
       } else {
         throw new TypeError(
           `form key ${property} value ${String(value)}` +
           ` of type ${typeof value} isn't valid`
-        );  
+        );
       }
     }
     const options: RequestInit = {
@@ -144,7 +148,6 @@ export class Uguu extends FileHost {
 };
 
 export default async function main(args: string[]): Promise<number> {
-  let ret = 0;
   const options: util.ParseArgsOptionsConfig = {
     help: {
       type: 'boolean',
@@ -163,26 +166,38 @@ export default async function main(args: string[]): Promise<number> {
     }
   };
 
+  let flags, files;
   try {
     const { values, positionals } = util.parseArgs(
       {options, args, allowPositionals: true}
     );
+    flags = values;
+    files = positionals;
 
-    if (values.help) {
+    if (flags.help) {
       helpFlag();
     }
 
-    if (positionals.length === 0) {
+    if (files.length === 0) {
       throw new Error(`no input file`);
     }
-
-    let serviceNames = values['service'] as undefined | string;
-    let service = FileHost.service(serviceNames);
-    let host = new service();
-    console.log(await host.upload(positionals[0]));
   } catch (error) {
-    ret = typeof error === 'number' ? error : err(error as Error);
+    return typeof error === 'number' ? error : err(error as Error);
   };
+
+  let ret = 0;
+  for (const file of files) {
+    try {
+      let serviceNames = flags['service'] as undefined | string;
+      let service = FileHost.service(serviceNames);
+      let host = new service();
+      console.log(await host.upload(file));
+
+    } catch (error) {
+      err(error as Error);
+      ret = 1;
+    }
+  }
 
   return ret;
 }
@@ -201,8 +216,8 @@ function helpFlag() {
 // Doesn't exit because I don't know how I'd test the rest of the program
 // properly if it was exiting all the time over monkeypatched implementations or
 // deliberately wrong input.
-// 
-// print error.message and return an error exit code.
+//
+// print error information and return an error exit code.
 function err(error: Error): number;
 // print message and return exitValue.
 function err(exitValue: number, message: string): number;
@@ -216,7 +231,9 @@ function err(
   let exitValue;
   if (errorOrExitValue instanceof Error) {
     exitValue = 1;
-    format = errorOrExitValue.message;
+    // Typescript bug: it's missing the 'code' property for Error.
+    let code = (errorOrExitValue as any)['code'] as string | undefined;
+    format = `${errorOrExitValue.message}${code ? ': ' + code : ''}`;
   } else {
     exitValue = errorOrExitValue;
   }
