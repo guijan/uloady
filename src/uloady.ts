@@ -21,6 +21,8 @@ type Constructor<T> =
   T extends abstract new (...args: infer P) => infer R ?
   new (...args: P) => R :
   never;
+// Useful link to find more hosts to add:
+// https://github.com/ShareX/CustomUploaders
 abstract class FileHost {
   // maxFileSize is the maximum file size allowed by the host.
   protected abstract readonly maxFileSize: number;
@@ -207,6 +209,29 @@ export class PomfLain extends Uguu {
   // https://pomf.lain.la/f/faq.html
   protected readonly maxFileSize = 1024 * 1024 * 1024;
   protected readonly url = 'https://pomf.lain.la/upload.php?output=text';
+}
+
+@FileHost.subClass
+export class LewdPics extends FileHost {
+  // Undocumented: https://lewd.pics/p/
+  //
+  // curl -L -F fileToUpload=@/tmp/test_image.png -F curl2=1 https://lewd.pics/p/
+  // When curl2=1 is set in the formData, the server replies in plaintext
+  // with a link to an indirect download page as such:
+  // https://lewd.pics/p/?i=PW2o.png
+  // All that is needed to make it direct is to remove the "?i=", e.g.:
+  // https://lewd.pics/p/PW2o.png
+  protected readonly maxFileSize = 25 * 1024 * 1024;
+  protected readonly url = 'https://lewd.pics/p/';
+  protected readonly formValues = {
+    exifData: 'no', // 'Discard Exif Data' checkbox.
+    curl2: "1", // When this is set, the server sends a plaintex reply
+    fileToUpload: FileHost.dataToken,
+  };
+  protected readonly responseFixup = (response: string) => {
+    return response.replace('?i=', '');
+  }
+  protected readonly default = false;
 }
 
 @FileHost.subClass
