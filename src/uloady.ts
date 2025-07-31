@@ -180,20 +180,64 @@ export class Catbox extends FileHost {
   }
 };
 
-// 0x0st
 @FileHost.subClass
-export class OxOst extends FileHost {
-  // Documentation: https://0x0.st
+export class X0at extends FileHost {
+  // Documentation: https://x0.at
   protected readonly maxFileSize = 512 * 1024 * 1024;
-  protected readonly url: string = 'https://0x0.st';
+  protected readonly url: string = 'https://x0.at';
   protected readonly formValues = {file: FileHost.dataToken};
 };
 
 @FileHost.subClass
-export class X0at extends OxOst {
-  // Documentation: https://x0.at
-  protected readonly url = 'https://x0.at';
+export class OxOst /* 0x0st */ extends X0at {
+  // Documentation: https://0x0.st
+  protected readonly url = 'https://0x0.st';
 };
+
+@FileHost.subClass
+export class PutNu extends X0at {
+  // Undocumented: https://put.nu
+  //
+  // Strangely, the filename seems to dictate how long the file is hosted for.
+  // 0.ext = 1 hour
+  // 1.ext = 3 days
+  // 2.ext = 1 week
+  // 3.ext = 1 month
+  // 4.ext = 3 months
+  // 5.ext = eternity
+  // The extension is only used to set the url's extension, it doesn't dictate
+  // the file's duration.
+  protected readonly maxFileSize = 50 * 1024 * 1024 * 1024; // Unknown.
+  protected readonly url = 'http://put.nu/py/main.py'; // UNENCRYPTED!
+  protected readonly fileNameFixup = (fileName: string) => {
+    const oneMonth = '3';
+    return oneMonth + path.extname(fileName).trim();
+  }
+  protected readonly responseFixup = (response: string) => {
+    // The 3rd line contains:
+    // <a href="http://put.nu/files/81l-xsO.png"><p>http://put.nu/files/81l-xsO.png</p></a>
+    return response.split('"', 6)[5];
+  }
+}
+
+@FileHost.subClass
+export class GoFileIO extends X0at {
+  // Documentation: https://gofile.io/api
+  //
+  // Server response looks like this:
+  // {"data":{"createTime":1753917377,"downloadPage":"https://gofile.io/d/kJ6fm8","guestToken":"YdZ5fjNEK4toR5HxyoXodN74qukoncuf","id":"e882ca92-8338-4a20-8371-b11e25ae7353","md5":"074929ca061af7af3dc91725857daa51","mimetype":"image/png","modTime":1753917377,"name":"test_image.png","parentFolder":"ba6f643d-8805-48c0-8834-e7e1c2e86cac","parentFolderCode":"kJ6fm8","servers":["store8"],"size":238,"type":"file"},"status":"ok"}
+  //
+  protected readonly maxFileSize = 50 * 1024 * 1024 * 1024; // Unknown.
+  protected readonly url = 'https://upload.gofile.io/uploadfile';
+  protected readonly fileNameFixup = (fileName: string) => {
+    return path.basename(fileName).trim();
+  }
+  protected readonly responseFixup = (response: string) => {
+    const json = JSON.parse(response);
+    return json.data.downloadPage;
+  }
+  protected readonly default = false
+}
 
 @FileHost.subClass
 export class Uguu extends FileHost {
@@ -232,57 +276,6 @@ export class LewdPics extends FileHost {
     return response.replace('?i=', '');
   }
   protected readonly default = false;
-}
-
-@FileHost.subClass
-export class GoFileIO extends FileHost {
-  // Documentation: https://gofile.io/api
-  //
-  // Server response looks like this:
-  // {"data":{"createTime":1753917377,"downloadPage":"https://gofile.io/d/kJ6fm8","guestToken":"YdZ5fjNEK4toR5HxyoXodN74qukoncuf","id":"e882ca92-8338-4a20-8371-b11e25ae7353","md5":"074929ca061af7af3dc91725857daa51","mimetype":"image/png","modTime":1753917377,"name":"test_image.png","parentFolder":"ba6f643d-8805-48c0-8834-e7e1c2e86cac","parentFolderCode":"kJ6fm8","servers":["store8"],"size":238,"type":"file"},"status":"ok"}
-  //
-  protected readonly maxFileSize = 50 * 1024 * 1024 * 1024; // Unknown.
-  protected readonly url = 'https://upload.gofile.io/uploadfile';
-   protected readonly formValues = {
-    'file': FileHost.dataToken,
-  }
-  protected readonly fileNameFixup = (fileName: string) => {
-    return path.basename(fileName).trim();
-  }
-  protected readonly responseFixup = (response: string) => {
-    const json = JSON.parse(response);
-    return json.data.downloadPage;
-  }
-  protected readonly default = false
-}
-
-@FileHost.subClass
-export class PutNu extends FileHost {
-  // Undocumented: https://put.nu
-  //
-  // Strangely, the filename seems to dictate how long the file is hosted for.
-  // 0.ext = 1 hour
-  // 1.ext = 3 days
-  // 2.ext = 1 week
-  // 3.ext = 1 month
-  // 4.ext = 3 months
-  // 5.ext = eternity
-  // The extension is only used to set the url's extension, it doesn't dictate
-  // the file's duration.
-  protected readonly maxFileSize = 50 * 1024 * 1024 * 1024; // Unknown.
-  protected readonly url = 'http://put.nu/py/main.py'; // UNENCRYPTED!
-  protected readonly formValues = {
-    file: FileHost.dataToken,
-  }
-  protected readonly fileNameFixup = (fileName: string) => {
-    const oneMonth = '3';
-    return oneMonth + path.extname(fileName).trim();
-  }
-  protected readonly responseFixup = (response: string) => {
-    // The 3rd line contains:
-    // <a href="http://put.nu/files/81l-xsO.png"><p>http://put.nu/files/81l-xsO.png</p></a>
-    return response.split('"', 6)[5];
-  }
 }
 
 @FileHost.subClass
