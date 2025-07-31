@@ -318,6 +318,7 @@ export class TempSh extends FileHost {
   protected readonly responseFixup = (response: string) => {
     return response.replace(/^http:\/\//, 'https://');
   }
+  protected readonly default = false
 }
 
 @FileHost.subClass
