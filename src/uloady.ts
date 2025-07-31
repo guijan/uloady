@@ -259,6 +259,35 @@ export class TmpFiles extends X0at {
 };
 
 @FileHost.subClass
+export class UploadPie extends FileHost {
+// Undocumented: https://uploadpie.com/
+//
+// curl -F upload=1 -F uploadedfile=@/tmp/test_image.png -F expire=3 https://uploadpie.com/
+//
+// "expire" is set to a number which controls the expiry date.
+// 1 is in 1 hour.
+// 2 is in 6 hours.
+// 3 is in 12 hours.
+//
+// The web interface sends other form data values which serve unknown purposes.
+//
+// The response is an HTML page where one line contains the link:
+// <input type="text" id="uploaded" value="https://uploadpie.com/slc2nO" onclick="auto_select();" readonly="readonly" />
+  protected readonly maxFileSize = 3 * 1024 * 1024;
+  protected readonly url = 'https://uploadpie.com/';
+  protected readonly formValues = {
+    upload: '1',
+    expire: '3',
+    uploadedfile: FileHost.dataToken,
+  }
+  protected readonly responseFixup = (response: string) => {
+    // Very fragile indeed.
+    return response.split('\n', 24)[23].slice(48,76);
+  }
+  protected readonly default = false
+}
+
+@FileHost.subClass
 export class PutNu extends X0at {
   // Undocumented: https://put.nu
   //
