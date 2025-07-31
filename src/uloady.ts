@@ -1,9 +1,28 @@
 import console from 'node:console';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
+// Borked API design, I need to wrap it in my own `path` namespace to prevent
+// accidental usage.
+import badPath from 'node:path';
 import process from 'node:process';
 import util from 'node:util';
+
+namespace path {
+  export function extname(fileName: string) {
+    const baseName = badPath.basename(fileName);
+    if (baseName[0] === '.') {
+      return baseName;
+    }
+    return badPath.extname(fileName);
+  }
+  export function basename(fileName: string, suffix?: string) {
+    fileName = badPath.basename(fileName);
+    if (suffix !== undefined && fileName.endsWith(suffix)) {
+      fileName = fileName.slice(0, fileName.length - suffix.length);
+    }
+    return fileName;
+  }
+}
 
 const programName = process.argv[1] ? path.basename(process.argv[1]) : 'uloady';
 const programVersion: string = JSON.parse(fs.readFileSync(
@@ -192,6 +211,51 @@ export class X0at extends FileHost {
 export class OxOst /* 0x0st */ extends X0at {
   // Documentation: https://0x0.st
   protected readonly url = 'https://0x0.st';
+};
+
+@FileHost.subClass
+export class TmpFiles extends X0at {
+  // Poorly documented: https://tmpfiles.org/api https://tmpfiles.org/
+  //
+  // The server response looks like this:
+  // {"status":"success","data":{"url":"http://tmpfiles.org/8468985/test_image.png"}}
+  //
+  // The response contains a link to the preview page without transport encryption.
+  // You can turn it into a direct link by adding "dl/" to the path, after the
+  // domain and before the file hash, as in:
+  // https://tmpfiles.org/dl/8468862/test_image.png
+  //
+  // Errors if you send a file with a basename shorter than 2 characters, or
+  // with an extension (including the dot) shorter than 4 characters or longer
+  // than 6 characters.
+  protected readonly maxFileSize = 100 * 1024 * 1024;
+  protected readonly url = 'https://tmpfiles.org/api/v1/upload';
+  protected readonly fileNameFixup = (fileName: string) => {
+    let extName = path.extname(fileName);
+    let baseName = path.basename(fileName, extName);
+    if (baseName.length < 2) {
+      const base64url =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZ' +
+        'abcdefghijklmnopqrstuvwxyz' +
+        '0123456789' +
+        '-_';
+      baseName = '';
+      while (baseName.length < 8) {
+        baseName += base64url[crypto.randomInt(base64url.length)];
+      }
+    }
+    if (extName.length < 4 || extName.length > 6) {
+      extName = '.bin';
+    }
+    return baseName + extName;
+  }
+  protected readonly responseFixup = (response: string) => {
+    let url = JSON.parse(response).data.url;
+    url = url.replace(/^http:\/\//, 'https://');
+
+    return url.slice(0,21) + 'dl/' + url.slice(21);
+  }
+  protected readonly default = false
 };
 
 @FileHost.subClass
