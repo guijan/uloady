@@ -257,6 +257,35 @@ export class GoFileIO extends FileHost {
 }
 
 @FileHost.subClass
+export class PutNu extends FileHost {
+  // Undocumented: https://put.nu
+  //
+  // Strangely, the filename seems to dictate how long the file is hosted for.
+  // 0.ext = 1 hour
+  // 1.ext = 3 days
+  // 2.ext = 1 week
+  // 3.ext = 1 month
+  // 4.ext = 3 months
+  // 5.ext = eternity
+  // The extension is only used to set the url's extension, it doesn't dictate
+  // the file's duration.
+  protected readonly maxFileSize = 50 * 1024 * 1024 * 1024; // Unknown.
+  protected readonly url = 'http://put.nu/py/main.py'; // UNENCRYPTED!
+  protected readonly formValues = {
+    file: FileHost.dataToken,
+  }
+  protected readonly fileNameFixup = (fileName: string) => {
+    const oneMonth = '3';
+    return oneMonth + path.extname(fileName).trim();
+  }
+  protected readonly responseFixup = (response: string) => {
+    // The 3rd line contains:
+    // <a href="http://put.nu/files/81l-xsO.png"><p>http://put.nu/files/81l-xsO.png</p></a>
+    return response.split('"', 6)[5];
+  }
+}
+
+@FileHost.subClass
 export class Blicky extends FileHost {
   // Undocumented. Selecting a file for upload says the file size limit is
   // 100MiB. https://f.blicky.net
