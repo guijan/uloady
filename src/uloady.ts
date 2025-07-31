@@ -341,6 +341,15 @@ export class Uguu extends FileHost {
 };
 
 @FileHost.subClass
+export class FileDitch extends Uguu {
+  // Documentation: https://fileditch.com/tools.html
+  // Seems like a pomf clone with modifications.
+  protected readonly maxFileSize = 10 * 1024 * 1024 * 1024;
+  protected readonly url = 'https://up1.fileditch.com/upload.php?output=text';
+  protected readonly default = false
+};
+
+@FileHost.subClass
 export class PomfLain extends Uguu {
   // Undocumented, but it's just a pomf clone.
   // https://pomf.lain.la/f/faq.html
