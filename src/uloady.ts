@@ -294,7 +294,7 @@ export class QuestionableLink extends FileHost {
   // Replace sxcu.net with questionable.link wherever you see it in the
   // documentation.
   // I noticed "noembed" has "void" type in the documentation but it's actually
-  // just a boolean converted to a string according to the source code. 
+  // just a boolean converted to a string according to the source code.
   protected readonly maxFileSize = 95 * 1024 * 1024;
   protected readonly url = 'https://questionable.link/api/files/create';
   protected readonly formValues = {
@@ -306,6 +306,25 @@ export class QuestionableLink extends FileHost {
     return json.url;
   }
   protected readonly default = false
+}
+
+@FileHost.subClass
+export class TempSh extends FileHost {
+  // Documentation: https://temp.sh/
+  //
+  // curl -F "file=@test.txt" https://temp.sh/upload
+  // There is only a preview page.
+  protected readonly maxFileSize = 4 * 1024 * 1024 * 1024;
+  protected readonly url = 'https://temp.sh/upload';
+  protected readonly formValues = {
+    file: FileHost.dataToken,
+  }
+  protected readonly fileNameFixup = (name: string) => {
+    return path.basename(name);
+  }
+  protected readonly responseFixup = (response: string) => {
+    return response.replace(/^http:\/\//, 'https://');
+  }
 }
 
 @FileHost.subClass
