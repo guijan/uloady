@@ -286,6 +286,29 @@ export class PutNu extends FileHost {
 }
 
 @FileHost.subClass
+export class QuestionableLink extends FileHost {
+  // Documentation: https://questionable.link/api/docs/#post-/files/create
+  // Source code: https://github.com/jacobhumston/sxcu.api
+  // This is an alternate domain to sxcu.net, files uploaded to one appear on the
+  // other. I picked this domain because it's funny.
+  // Replace sxcu.net with questionable.link wherever you see it in the
+  // documentation.
+  // I noticed "noembed" has "void" type in the documentation but it's actually
+  // just a boolean converted to a string according to the source code. 
+  protected readonly maxFileSize = 95 * 1024 * 1024;
+  protected readonly url = 'https://questionable.link/api/files/create';
+  protected readonly formValues = {
+    file: FileHost.dataToken,
+    noembed: 'true',
+  }
+  protected readonly responseFixup = (response: string) => {
+    const json = JSON.parse(response);
+    return json.url;
+  }
+  protected readonly default = false
+}
+
+@FileHost.subClass
 export class Blicky extends FileHost {
   // Undocumented. Selecting a file for upload says the file size limit is
   // 100MiB. https://f.blicky.net
