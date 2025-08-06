@@ -10,7 +10,7 @@ import util from 'node:util';
 namespace path {
   export function extname(fileName: string) {
     const baseName = badPath.basename(fileName);
-    if (baseName[0] === '.') {
+    if (baseName.length === 0 || baseName[0] === '.') {
       return baseName;
     }
     return badPath.extname(fileName);
