@@ -114,7 +114,9 @@ abstract class FileHost {
     for (const name of wantedServices) {
       let constructor = this.derivedClass.get(name);
       if (constructor === undefined) {
-        throw new Error(`unknown service '${name}' in '${services}'`);
+        const validServices = [...this.derivedClass.keys()].sort();
+        throw new Error(
+          `unknown service '${name}' not in '${validServices}'`);
       }
       services.set(name, constructor);
     }
