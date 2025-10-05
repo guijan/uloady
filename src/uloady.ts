@@ -26,8 +26,8 @@ namespace path {
 
 const programName = process.argv[1] ? path.basename(process.argv[1]) : 'uloady';
 const programVersion: string = JSON.parse(fs.readFileSync(
-      import.meta.dirname + '/../package.json',
-      'utf8'
+  import.meta.dirname + '/../package.json',
+  'utf8'
 )).version;
 const userAgent = `uloady/${programVersion}`;
 
