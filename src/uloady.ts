@@ -98,33 +98,25 @@ abstract class FileHost {
     }
   }
   static service(
-    serviceNames: undefined | string,
+    serviceNames: string = `${[...this.derivedClass.keys()]}`,
     fileName: string,
     fileSize: number,
   ): Constructor<typeof FileHost> {
     let services: typeof this.derivedClass = new Map();
-    if (serviceNames === undefined) { // Set services to all the possible services.
-      for (const [name, info] of services) {
-        if (info.default) {
-          services.set(name, info);
-        }
+    let wantedServices = serviceNames.split(',').map((array) => array.trim());
+    // Comma is optional for the last element.
+    if (wantedServices[wantedServices.length-1] === '') {
+      wantedServices.pop();
+    }
+    if (wantedServices.length === 1 && wantedServices[0] === 'default') {
+      return this.service(undefined, fileName, fileSize);
+    }
+    for (const name of wantedServices) {
+      let constructor = this.derivedClass.get(name);
+      if (constructor === undefined) {
+        throw new Error(`unknown service '${name}' in '${services}'`);
       }
-    } else { // Set services to the subset of services picked by the user.
-      let wantedServices = serviceNames.split(',').map((array) => array.trim());
-      // Comma is optional for the last element.
-      if (wantedServices[wantedServices.length-1] === '') {
-        wantedServices.pop();
-      }
-      if (wantedServices.length === 1 && wantedServices[0] === 'default') {
-        return this.service(undefined, fileName, fileSize);
-      }
-      for (const name of wantedServices) {
-        let constructor = this.derivedClass.get(name);
-        if (constructor === undefined) {
-          throw new Error(`unknown service '${name}' in '${services}'`);
-        }
-        services.set(name, constructor);
-      }
+      services.set(name, constructor);
     }
 
     // Ensure all the services can handle the file's size.
